@@ -76,7 +76,7 @@ function Promise(constructor){
     function resolve(value){
         if(that.status === PENDING){
             that.status = FULFILLED;
-            that.value = vlauie;
+            that.value = value;
             that.onFulfilledCallbacks.map(fn=>fn())
         }
     

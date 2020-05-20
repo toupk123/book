@@ -44,7 +44,7 @@ if(typeof DEBUG  !== 'undefined'){
 
 3. isPrototypeof用于检查传入的对象是否是另一个对象的原型。
 
-4. propertyIsEnumerable(propertyName)判断数据能否使用for-in
+4. propertyIsEnumerable(propertyName)判断数据能否使用for-in(也就是可枚举还是不可枚举)
 
 5. toLocaleString 返回对象字符串表示，该字符串与执行环境的地区对应。
 
@@ -53,6 +53,10 @@ if(typeof DEBUG  !== 'undefined'){
 7. valueOf():返回对象的字符串 数值 或者布尔值表示，通常与toString()返回值相同
 
 
+```js
+// 
+
+```
 
 ## 数组
 

@@ -94,10 +94,9 @@ ExecutionContext = {
 
 js是自己垃圾收集机制，每隔一段时间就会执行一次释放操作。
 
-局部变量和全局变量
-
-- **局部变量**：局部作用域中，当函数执行完毕，局部变量也就没有存在的必要了，因此垃圾收集器很容易做出判断并回收。
-- **全局变量**：全局变量什么时候需要自动释放内存空间则很难判断，所以在开发中尽量**避免**使用全局变量。
+- **局部变量**：局部作用域中，当函数执行完毕，局部变量也就没有存在的必要了，因此垃圾收集器很容易做出判断并回收。局部变量中基本类型是存在栈内存，引用类型是存在堆内存。
+- **全局变量**：全局变量什么时候需要自动释放内存空间则很难判断，所以在开发中尽量**避免**使用全局变量。同时这类变量不管是基础类型还是引用类型，其值是存在堆内存中。
+- **被捕获变量**：也就是闭包内的变量，这类变量都是存在堆内存中。 
 
 以Google的V8引擎为例，V8引擎中所有的JS对象都是通过**堆**来进行内存分配的
 
@@ -192,7 +191,268 @@ var throttled = function(){
 
 promise在异步编程方面，可以用来解决回调地域，并且进行链式调用。
 
+1. promise有三个状态，pending，fulfilled和rejected。一但状态修改，则无法再改变状态。
 
+2. promise一但新建，就会立即执行无法取消。如果不设置回调函数，Promise内部抛出的错误，在外部就无法捕获原因
+
+   ```js
+   try {
+     new Promise(function () {
+       ss
+     })
+   } catch (e) {
+     console.log(e);
+   } 
+   console.log('111')
+   // 在外部是无法捕获的，但是js引擎不会停止解析，会继续执行后面代码
+   // 111 还是会被打印
+   new Promise(function () {
+       ss
+     }).reject(e=>{
+         console.log(e)
+     }) // 类似于设置了reject并且捕获了错误原因
+   ```
+
+   promise如果抛出错误，就会一直向后传递，直到被捕获。
+
+   ```js
+   getJSON('/post/1.json').then(function(post) {
+     return getJSON(post.commentURL);
+   }).then(function(comments) {
+     // some code
+   }).catch(function(error) {
+     // 处理前面三个Promise产生的错误
+   });
+   ```
+
+3. 一般对于错误的捕获，尽量使用catch方法来捕获，不推荐使用then方法，因为catch还可以捕获到前面
+
+## promise中的一些api
+
+1. finally。不关最后状态如何，finally方法内函数都会被执行，不过finally中是无法知道前面状态的。
+
+2. all。将多个promise包装成一个新的promise。传入的可以不是数组，但一定得有Iterator。只有当所有的promise状态改变为resolve，才会调用then方法中resolve方法。只要有其中某一个promise的状态为reject，就会立马调用all的状态就会马上变为reject，并且调用reject方法，而不会等待其他结果返回。不过其中promise本身是捕获了这个错误，那么就不会触发all中的reject。
+
+   ```js
+   const promise1 = new Promise((res,rej)=>{
+     setTimeout(function(){
+       rej('测试1')
+     },1000)
+   })
+   
+   const promise2 = new Promise((res,rej)=>{
+     setTimeout(function(){
+       res('ceshi2')
+     },3000)
+   })
+   
+   
+   
+   Promise.all([promise1,promise2]).then((res)=>{
+     console.log('res',res)
+   },rej=>{
+     console.log('rej',rej);
+   }); // 可以进行测试，在第一个返回的时候，就已经触发了all的rej
+   ```
+
+   
+
+3.  race ，就是和all类似，但只要有一个promise状态改变，就会调用then
+4. allSettled。对应上面的all，只要全部状态返回，不关结果都会调用then中的resolve。all中是如果有某一个出现错误，就不会去关其他promise返回结果，调用all中的reject。allSettled还是会等待其他结果。
+
+## promise和原生ajax配合
+
+```js
+function getJSON(url) {
+  return new Promise(function (res, rej) {
+    function handler() {
+      if (this.readyState == 4 && this.status == 200) {
+        res(this)
+      } else {
+        rej(this)
+      }
+    }
+    xhr.open('get', 'https://jsbin.com/zokezamufa/edit?js,output');
+
+    xhr.responseType = "json";
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.onreadystatechange = handler
+    xhr.send();
+  })
+}
+
+getJSON(URL).then
+
+```
+
+## promise的手写代码
+
+```js
+class MyPromise {
+    constructor(executor) {
+        this.value = undefined;
+        this.status = 'pending'
+        this.onRejected = [] // 储存失败的函数
+        this.onResolved = [] // 储存成功的函数
+        var resolve = result => {
+            if (this.status != 'pending') {
+                return
+            }
+            this.status = "resolved";
+            this.value = result;
+
+            this.onResolved.map(fn => {
+                fn(result)
+            })
+        }
+        var reject = result => {
+            if (this.status != 'pending') {
+                return
+            }
+            this.status = "reject";
+            this.value = result;
+            this.onRejected.map(fn => fn(result))
+        }
+        try {
+            executor(resolve, reject)
+        } catch (e) {
+            reject(e)
+        }
+    }
+
+    then(onResolve, onReject) {
+        const promise2 = new MyPromise((resolve, reject) => {
+
+           
+            if (typeof onResolve !== 'function') {
+                return onResolve = resule => resule
+            }
+            if (typeof onReject !== 'function') {
+                onReject = resule => {
+                    return onReject = resule => resule
+                }
+            }
+     
+            if (this.status === 'pending') {
+                this.onResolved.push(() => {
+                    let x = onResolve(this.value);
+                    resolvePromise(this, x, resolve, reject)
+                })
+
+                this.onRejected.push(() => {
+                    let x = onReject(this.value)
+                    resolvePromise(this, x, resolve, reject)
+                })
+            }
+            console.log('cesjo',this)
+            if (this.status === 'resolved') {
+                const x = onResolve(this.value)
+                
+                resolvePromise(this, x, resolve, reject)
+            }
+            if (this.status === 'reject') {
+                const x = onReject(this.value)
+                resolvePromise(this, x, resolve, reject)
+            }
+        })
+        return promise2
+    }
+    static all(promises) {
+        let arr = [];
+        let i = 0;
+        function processData(index, data) {
+            arr[index] = data;
+            i++;
+            if (i == promises.length) {
+                resolve(arr);
+            };
+        };
+        return new Promise((resolve, reject) => {
+            for (let i = 0; i < promises.length; i++) {
+                promises[i].then(data => {
+                    processData(i, data);
+                }, reject);
+            };
+        });
+    }
+    static race(promises) {
+        return new Promise((resolve, reject) => {
+            for (let i = 0; i < promises.length; i++) {
+                promises[i].then(resolve, reject)
+            };
+        })
+    }
+    static resolve(data){
+        return new MyPromise(function(res,rej){
+            res(data)
+        })
+    }
+
+}
+
+function resolvePromise(promise2, x, resolve, reject) {
+
+    if (x === promise2) {
+        return reject(new TypeError('产生了循环引用'))
+    }
+    //防止多次调用
+
+    let called = false
+    if (x !== null && (typeof x === 'object' || typeof x === 'function')) {
+        try {
+            let then = x.then
+            if (typeof then === 'function') {
+
+                then.call(x, y => {
+
+                    if (called) return
+                    called = true
+
+                    resolvePromise(promise2, y, resolve, reject);
+                }, err => {
+                    if (called) return
+                    called = true
+                    reject(err);
+                })
+            } else {
+                resolve(x);
+            }
+        } catch (e) {
+            if (called) return
+            called = true
+            reject(e)
+        }
+    } else {
+        resolve(x)
+    }
+};
+```
+
+
+
+
+
+## 其他
+
+promise的使用还和其他知识点有关联，后面再记录。
+
+1. 微任务和宏任务
+2. async/await
+3. Generator函数
+
+# 前端MVC和MVVM
+
+## MVC
+
+MVC是一种设计模式，将应用分为三层
+
+1. 数据(也就是模型m)
+2. 展示层(view)
+3. 用户交互层(contoller)
+
+
+
+# js中的数据类型
 
 
 

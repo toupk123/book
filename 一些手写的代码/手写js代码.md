@@ -9,7 +9,7 @@ function New(func){
     }
     var ret = func.apply(res, Array.prototype.slice.call(arguments, 1));
 
-    if((typeof ret === 'object' || typeof ret ==='function')&& typeof !== 'null'){
+    if((typeof ret === 'object' || typeof ret ==='function')&& ret !== null){
         return ret 
     }
 

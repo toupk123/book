@@ -111,7 +111,7 @@ a.toString() // 1,23,4 函数会自动去调用对象原型上的toString()，�
 1. reverse() // 翻转数组
 
 2. sort //对数组进行排序
- 
+
  sort接受一个函数，对前后两个元素进行比较，而后进行排序
 
  返回负数代表 需要交换位置，返回正数，则代表不需要交换位置
@@ -181,4 +181,20 @@ var a = [1,2,3] ; a.toString();
 Object.prototype.toString([1,2.3]) // "[object Array]"
 ```
 可以看到返回一个字符串值，也就从侧面验证，所有的对象都是拥有toString方面，只是不同的类型构造函数，都重写了toString方法
+
+# 关于数据类型检测
+
+## instanceof能不能判断基础类型
+
+instantceof一般用来判断引用类型，但是通过对构造函数进行设置，也是可以用来判断基础类型。
+
+```js
+class PrimitiveNumber{
+	static [Symbol.hasInstance](x){
+    return typeof x ==='number'
+  }
+}
+
+console.log(111 instanceof PromitiveNumber)
+```
 

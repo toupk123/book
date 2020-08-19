@@ -113,6 +113,22 @@ let name = 'sanyuan'
 
 ## 生成字节码
 
+当v8引擎获取到AST之后，会将其生成字节码，但是字节码并不能使机器直接运行。
+
+### 不能运行，为啥还要先生成字节码
+
+早期v8就是这样做的，但是机器码的体积太大，会引发严重的内存占用问题。字节码要比机器吗轻量的多。
+
+字节码需要使用解释器转换为机器码然后执行。
+
+字节码仍旧需要转换为机器码，但是现在不会一次性转换，而是解释器逐行执行字节码。
+
+## 执行代码
+
+执行字节码，如果发现某一部分代码重复，V8将它标记为`热点代码`，然后将这部分代码转换为机器码保存起来，这个编译的工具就是编译器。执行越久，自然热点代码越多，效率也就越高，因为不用解释器转换为机器码。
+
+js并不完全是解释型语言，因为需要字节码编译器和解释器共同作用，这种叫做`即使编译`，也就是`JIT`.
+
 
 
 # js中的垃圾回收
@@ -252,9 +268,17 @@ var throttled = function(){
     }
 ```
 
-# Promise相关问题
+# Promise
 
 promise在异步编程方面，可以用来解决回调地域，并且进行链式调用。
+
+为了解决掉回调地狱，promise用了三种方式：
+
+1. 回调函数延迟绑定
+2.  返回值穿透
+3.  错误冒泡
+
+这里的延迟是通过订阅发布模式
 
 1. promise有三个状态，pending，fulfilled和rejected。一但状态修改，则无法再改变状态。
 
@@ -353,157 +377,301 @@ getJSON(URL).then
 ## promise的手写代码
 
 ```js
-class MyPromise {
-    constructor(executor) {
+    const PENDING = 'pending';
+    const FULFILLED = 'fulfilled';
+    const REJECTED = 'rejected'
+    class MyPromise {
+      constructor(executor) {
         this.value = undefined;
-        this.status = 'pending'
-        this.onRejected = [] // 储存失败的函数
-        this.onResolved = [] // 储存成功的函数
-        var resolve = result => {
-            if (this.status != 'pending') {
-                return
-            }
-            this.status = "resolved";
-            this.value = result;
-
-            this.onResolved.map(fn => {
-                fn(result)
-            })
+        this.status = PENDING;
+        this.onResolved = [];
+        this.onRejected = [];
+        const resolve = result => {
+          if (this.status !== PENDING) {
+            return
+          }
+          this.value = result;
+          this.status = FULFILLED;
+          this.onResolved.map(fn => fn(result))
         }
-        var reject = result => {
-            if (this.status != 'pending') {
-                return
-            }
-            this.status = "reject";
-            this.value = result;
-            this.onRejected.map(fn => fn(result))
+
+        const reject = result => {
+          if (this.status !== PENDING) {
+            return
+          }
+          this.value = result;
+          this.status = REJECTED;
+          this.onRejected.map(fn => fn(result))
         }
         try {
-            executor(resolve, reject)
+          executor(resolve, reject)
         } catch (e) {
-            reject(e)
+          reject(e)
         }
-    }
+      }
+      then(onResolve, onReject) {
+        onResolve = typeof onResolve === 'function' ? onResolve : y => y
+        onReject = typeof onReject === 'function' ? onReject : err => { throw err; }
+        let bridgePromise = null
+        let statusObj = {
+          [FULFILLED]: (resolve, reject) => setTimeout(() => {
+            try {
+              const x = onResolve(this.value);
+              resolvePromise(bridgePromise, x, resolve, reject)
+            } catch (e) {
+              reject(e)
+            }
+          }, 0),
+          [REJECTED]: (resolve, reject) => setTimeout(() => {
+            try {
+              const x = onReject(this.value);
 
-    then(onResolve, onReject) {
-        const promise2 = new MyPromise((resolve, reject) => {
-
-           
-            if (typeof onResolve !== 'function') {
-                return onResolve = resule => resule
+              resolvePromise(bridgePromise, x, resolve, reject)
+            } catch (e) {
+              reject(e)
             }
-            if (typeof onReject !== 'function') {
-                onReject = resule => {
-                    return onReject = resule => resule
-                }
-            }
-     
-            if (this.status === 'pending') {
-                this.onResolved.push(() => {
-                    let x = onResolve(this.value);
-                    resolvePromise(this, x, resolve, reject)
-                })
-
-                this.onRejected.push(() => {
-                    let x = onReject(this.value)
-                    resolvePromise(this, x, resolve, reject)
-                })
-            }
-            console.log('cesjo',this)
-            if (this.status === 'resolved') {
-                const x = onResolve(this.value)
-                
-                resolvePromise(this, x, resolve, reject)
-            }
-            if (this.status === 'reject') {
-                const x = onReject(this.value)
-                resolvePromise(this, x, resolve, reject)
-            }
+          }, 0),
+          [PENDING]: (resolve, reject) => {
+            this.onResolved.push(() => statusObj[FULFILLED](resolve, reject))
+            this.onRejected.push(() => statusObj[REJECTED](resolve, reject))
+          }
+        }
+        return bridgePromise = new MyPromise((resolve, reject) => {
+          statusObj[this.status](resolve, reject);
         })
-        return promise2
-    }
-    static all(promises) {
-        let arr = [];
-        let i = 0;
-        function processData(index, data) {
-            arr[index] = data;
-            i++;
-            if (i == promises.length) {
-                resolve(arr);
-            };
-        };
+      }
+      finally(callback) {
+        this.then(value => {
+          return Promise.resolve(callback()).then(() => {
+            return value;
+          })
+        }, err => {
+          return Promise.resolve(callback()).then(() => {
+            throw error;
+          })
+        })
+      }
+      static resolve(param) {
+        if (param instanceof MyPromise) return param;
+        return new MyPromise((resolve, reject) => {
+          if (param && param.then && typeof param.then === 'function') {
+            param.then(resolve, reject);
+          } else {
+            resolve(param);
+          }
+        })
+      }
+      catch(onRejected) {
+        return this.then(null, onRejected)
+      }
+      static all(promises) {
+        return new MyPromise((resolve, reject) => {
+          let result = [];
+          let index = 0;
+          let len = promises.length;
+          if (len === 0) {
+            resolve(result);
+            return;
+          }
+          for (let i = 0; i < promises.length; i++) {
+            MyPromise.resolve(promises[i]).then(data => {
+              result[i] = data;
+              index++;
+              if (index === len) resolve(result);
+            }).catch(err => reject(err))
+          }
+        })
+      }
+      static race(promises) {
         return new Promise((resolve, reject) => {
-            for (let i = 0; i < promises.length; i++) {
-                promises[i].then(data => {
-                    processData(i, data);
-                }, reject);
-            };
-        });
-    }
-    static race(promises) {
-        return new Promise((resolve, reject) => {
-            for (let i = 0; i < promises.length; i++) {
-                promises[i].then(resolve, reject)
-            };
+          if (promises.length === 0) {
+            return
+          }
+          for (let i; i < promises.length; i++) {
+            MyPromise.resolve(promises[i]).then(data => {
+              resolve(data)
+              return
+            }).catch(err => {
+              reject(err)
+              returns
+            })
+          }
         })
-    }
-    static resolve(data){
-        return new MyPromise(function(res,rej){
-            res(data)
-        })
+      }
     }
 
+    function resolvePromise(bridgePromise, x, resolve, reject) {
+      if (x === bridgePromise) {
+        return reject(new TypeError('循环引用'))
+      }
+      let called;
+      if (x !== null && (typeof x === 'object' || typeof x === "function")) {
+        let then = x.then;
+        if (typeof then === 'function') {
+          try {
+            then.call(x, y => {
+              if (called) return;
+              called = true
+              resolvePromise(promise2, y, resolve, reject)
+            }, error => {
+              if (called) return;
+              called = true
+              reject(err)
+            })
+          } catch (e) {
+            reject(e)
+          }
+        } else {
+          if (called) return;
+          called = true
+          reject(e)
+        }
+      } else {
+        resolve(x)
+      }
+    }
+```
+
+# 生成器以及协程
+
+```js
+function* gen() {
+  console.log("enter");
+  let a = yield 1;
+  let b = yield (function () {return 2})();
+  return 3;
+}
+var g = gen() // 阻塞住，不会执行任何语句
+console.log(typeof g)  // object  看到了吗？不是"function"
+
+console.log(g.next())  
+console.log(g.next())  
+console.log(g.next())  
+console.log(g.next()) 
+
+```
+
+## yield* 
+
+一个生成器需要另一个生成器配合。
+
+```js
+function* gen1() {
+    yield 1;
+    yield 4;
+}
+function* gen2() {
+    yield 2;
+    yield 3;
 }
 
-function resolvePromise(promise2, x, resolve, reject) {
+function* gen1() {
+    yield 1;
+    yield* gen2();
+    yield 4;
+}
+```
 
-    if (x === promise2) {
-        return reject(new TypeError('产生了循环引用'))
-    }
-    //防止多次调用
+## 生成器实现机制—协程
 
-    let called = false
-    if (x !== null && (typeof x === 'object' || typeof x === 'function')) {
-        try {
-            let then = x.then
-            if (typeof then === 'function') {
+比线程更加轻量级的存在，处于线程的环境中，`一个线程可以存在多个协程`,协程不受操作系统的管理，被具体的代码管理。协程一次只能运行一个。
 
-                then.call(x, y => {
+## 如何让Generator的异步按顺序执行
 
-                    if (called) return
-                    called = true
+### Generator和异步
 
-                    resolvePromise(promise2, y, resolve, reject);
-                }, err => {
-                    if (called) return
-                    called = true
-                    reject(err);
-                })
-            } else {
-                resolve(x);
+```js
+const readFileThunk=(filename)=>{
+	return (callback)=>{
+		fs.readFile(filename,callback)
+  } 
+}
+
+const gen = function* (){
+  const data1 = yield readFileThunk('001.txt')
+  console.log(data1.toString())
+  const data2 = yield readFileThunk('002.txt')
+  console.log(data2.toString)
+}
+
+
+let g = gen();
+// 第一步: 由于进场是暂停的，我们调用next，让它开始执行。
+// next返回值中有一个value值，这个value是yield后面的结果，放在这里也就是是thunk函数生成的定制化函数，里面需要传一个回调函数作为参数
+g.next().value((err, data1) => {
+  // 第二步: 拿到上一次得到的结果，调用next, 将结果作为参数传入，程序继续执行。
+  // 同理，value传入回调
+  g.next(data1).value((err, data2) => {
+    g.next(data2);
+  })
+})
+```
+
+### 使用promise方式
+
+```js
+let g = gen();
+function getGenPromise(gen, data) { 
+  return gen.next(data).value;
+}
+getGenPromise(g).then(data1 => {
+  return getGenPromise(g, data1);
+}).then(data2 => {
+  return getGenPromise(g, data2)
+})
+
+function run(g) {
+  const next = (data) => {
+    let res = g.next();
+    if(res.done) return;
+    res.value.then(data => {
+      next(data);
+    })
+  }
+  next();
+}
+```
+
+# async/await终极解决异步
+
+实际上也是配合生成器通过协程的方式。
+
+1. Async 会默认返回一个promise
+2. 同时await会造成堵塞，也就是类似 yield。
+
+```js
+    function asyncToGenerator(fn) {
+      return function () {
+        const gen = fn.call(this, arguments);
+        return new Promise((resolve, reject) => {
+ 
+          function step(key, arg) {
+            let generatorResult;
+            try {
+              generatorResult = gen[key](arg);
+            } catch (err) {
+              return reject(err)
             }
-        } catch (e) {
-            if (called) return
-            called = true
-            reject(e)
-        }
-    } else {
-        resolve(x)
+            const { value, done } = generatorResult;
+            if (done) {
+              return resolve(value)
+            } else {
+              return Promise.resolve(value).then(val => {
+                step('next', val)
+              }, err => {
+                step("throw", err)
+              })
+            }
+          }
+          step('next')
+        })
+        
+      }
     }
-};
+
 ```
 
 
-
-
-
-## 其他
-
-promise的使用还和其他知识点有关联，后面再记录。
-
-1. 微任务和宏任务
-2. async/await
-3. Generator函数
 
 # 前端MVC和MVVM
 

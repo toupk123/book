@@ -231,4 +231,150 @@ SubClass.prototype = Object.create(SpuerClass.prototype);
 SubClass.prototype.constructor = SubClass
 ```
 
+## 手写map
+
+```js
+Array.prototype.map = function(call,thisArg){
+  if(this === null || this === undefined){
+    throw new Error('没有map方法')
+  }
+  if(Object.prototype.toString.call(call)!= "[object Function]"){
+    throw new Error('call不是函数')
+  }
+  let O = Object(this)
+  let T = thisArg
+  let len = O.length;
+  let A = [];
+  for(let k = 0 ; k<len; k++){
+    if(k in O){
+      let kValue = O[k];
+      let mappedValue = callbackfn.call(T, KValue, k, O);
+      A[k] = mappedValue;
+    }
+  }
+  return A
+}
+```
+
+## 手写reduce
+
+```js
+Array.prototype.reduce = function(callfn,initValue){
+    // 处理数组类型异常
+  if (this === null || this === undefined) {
+    throw new TypeError("Cannot read property 'reduce' of null or undefined");
+  }
+  // 处理回调类型异常
+  if (Object.prototype.toString.call(callbackfn) != "[object Function]") {
+    throw new TypeError(callbackfn + ' is not a function')
+  }
+	let O = Object(this);
+  let len = O.length;
+  let k = 0;
+    let accumulator = initialValue;
+  if (accumulator === undefined) {
+    for(; k < len ; k++) {
+      // 查找原型链
+      if (k in O) {
+        accumulator = O[k];
+        k++;
+        break;
+      }
+    }
+  }
+	if(k ===len&& accumulator === undefined)  throw new Error('数组唯空')
+  for(;k<len;k++){
+    accumulator = callbackfn.call(undefined, accumulator, O[k], k, O);
+  }
+  return accumulator
+}
+
+```
+
+## 实现sort方法(待续)
+
+
+
+
+
+# 手写深拷贝
+
+## 简单拷贝
+
+```js
+let isObject = ( target) => (typeof target === "object"|| typeof target ==='function')&&target !==null;
+
+const deepClone  = (target, map= new WeakMap() ) =>{
+    
+  if(map.get(target)) return target
+    if(isObject(target)){
+        map.set(target,true);
+       const cloneTarget = Array.isArray(target) ? []: {}; 
+      Object.keys(target).map(key=>{
+        cloneTarget[key] = deepClone(target[key],map);
+        
+      })
+      return cloneTarget
+    } 
+  return target
+}
+
+```
+
+### 拷贝特殊的对象
+
+```js
+Object.prototype.toString.call(obj);
+```
+
+```js
+let isObject = ( target) => (typeof target === "object"|| typeof target ==='function')&&target !==null;
+const mapTag = '[object Map]';
+const setTag = '[object Set]';
+const arrayTag = '[object Array]';
+const objectTag = '[object Object]';
+const argsTag = '[object Arguments]';
+
+const deepTag = [mapTag, setTag, arrayTag, objectTag, argsTag];
+
+
+const getType = ( traget) =>{
+   return Object.prototype.call(target)
+}
+
+const getInit = (traget)=>{
+  const ctor = traget.contructor
+  return new ctor()
+}
+
+
+const deepClone  = (target, map= new WeakMap() ) =>{
+    
+  if(map.get(target)) return target
+    if(isObject(target)){
+      const cloneTarget ;
+        map.set(target,true);
+      let type = getType(target)
+        if(deepTag.find(type)){
+          cloneTarget = getInit()
+        } else {
+          
+        }
+      Object.keys(target).map(key=>{
+        cloneTarget[key] = deepClone(target[key],map);
+        
+      })
+      return cloneTarget
+    } 
+  return target
+}
+
+
+console.log(deepClone({s:1,x:2}));
+
+```
+
+
+
+
 

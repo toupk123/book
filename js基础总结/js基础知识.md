@@ -1348,5 +1348,133 @@ var regex = \(?=.*\d)\w{6,6}\
 
 # es6的一些总结
 
-​	
+	## 关于字符串新增方法
+
+### fromCodePoint
+
+可以根据unicode返回字符，这个方法是对之前方法fromCharCode的优化，因为之前无法识别0xFFFF字符
+
+### **includes**
+
+## Number
+
+### isFinite
+
+确认是不是Infinity，es6明显对infinity做了更多相关的方法
+
+### isInteger
+
+判断是不是一个整数，但是因为双精度的印象，超过53个二进位就会被丢弃
+
+```js
+Number.isInteger(3.0000000000000002)
+```
+
+## 函数扩展
+
+对于初始默认值，会对length产生影响。并且默认赋值是惰性求职，也就是在函数执行时，才会被赋值。
+
+`函数有默认赋值时，会有自己的单独环境，初始化完成后，环境就会消失`
+
+### 尾部调用优化
+
+因为函数有调用帧，在函数最后一步返回另一个执行的函数，那么之前函数的执行帧就会被删除。
+
+### 尾递归
+
+和上面类似，返回自身调用就行，只要使用尾递归的话，就不会出现栈溢出
+
+但是尾递归优化，只有开启严格模式才会执行。
+
+## 对象扩展
+
+### 属性的可枚举
+
+```js
+Object.defineProperty(object1, 'property1', {
+  value: 42,
+  writable: false,
+});
+// configurable 描述符是否能够被修改
+// enumerable 是否是枚举
+// value , writable 数据描述符 
+// get,set 存取描述符号  这两个不能共存的
+```
+
+1. for in 循环:只遍历自身和继承的可枚举属性
+2. Object.keys():返回自身可枚举属性
+3. JSON.stringify()
+4. Object.assign:只拷贝对象自身可枚举属性
+
+`都不会返回symbol`的键名
+
+`Object.getOwnPropertySymbols()`
+
+控制对象属性枚举属性。是enumerable 为false则是不可枚举，class的原型上的方法都是不可枚举
+
+可以获取到自身所有属性`Object.getOwnPropertyNames`
+
+### 链式调用?:
+
+```js
+var s = obj?.name||'name'
+or
+var s = obj?.[name]||'name'
+// ？.
+myForm.checkValidity?.() === false 
+// 如果没有这个属性的话，就只返回一个undefined，如果就去执行
+
+```
+
+### NULL判断运算符
+
+```js
+// 原先使用 ||  但是对''或者0都会判断为false，所以引入??
+const s = s ?? true // 只有当s为undefined 或者null
+lhs&&middle??rhs // 这里会报错，必须加上括号
+```
+
+## symbol
+
+ 创建一个唯一的键
+
+### Symbol.for
+
+可以创建一个全局性质的键名，根据传入的描述判断有没有这个，如果有就直接返回
+
+```js
+let s = Symbol.for('foo')
+Symbol.for('foo') === s // true
+```
+
+## 一些内置的值
+
+#### Symbol.hasInstance
+
+#### Symbol.isConcatSpreadable
+
+修改`concat`的合并规则，对于数组是默认展开，对于类数组，可以通过这个值设定展开
+
+#### Symbol.iterator
+
+对实例对象设置`Symbol.iterator`属性，拥有遍历器功能
+
+```js
+const myIterator={};
+myIterator[Symbol.iterator] = function*(){
+ yield 1; 
+ yield 2;
+ yield 3;
+}
+```
+
+## Reflect
+
+讲一些语言内部的api放置在这个内置对象上，更符合语言规范
+
+
+
+
+
+
 

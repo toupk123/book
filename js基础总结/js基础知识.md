@@ -425,7 +425,6 @@ getJSON(URL).then
           [REJECTED]: (resolve, reject) => setTimeout(() => {
             try {
               const x = onReject(this.value);
-
               resolvePromise(bridgePromise, x, resolve, reject)
             } catch (e) {
               reject(e)
